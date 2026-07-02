@@ -27,5 +27,7 @@ jobs:
         java-version: '21'
         distribution: 'temurin'
         cache: maven
+    - name: Dar permisos
+      run: chmod +x mvnw
     - name: Compilar el proyecto
       run: ./mvnw compile --no-transfer-progress
