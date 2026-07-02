@@ -7,6 +7,7 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.core.io.FileSystemResource;
@@ -15,6 +16,8 @@ import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import org.springframework.web.reactive.function.BodyInserters;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.uma.example.springuma.integration.base.AbstractIntegration;
 import com.uma.example.springuma.model.Imagen;
 import com.uma.example.springuma.model.Informe;
@@ -36,6 +39,9 @@ public class InformeControllerWebTestClientIT extends AbstractIntegration {
     private Integer port;
 
     private WebTestClient testClient;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     private Medico medico;
     private Paciente paciente;
@@ -91,15 +97,33 @@ public class InformeControllerWebTestClientIT extends AbstractIntegration {
                 .exchange()
                 .expectStatus().isOk();
 
-        List<Imagen> imagenes = testClient.get().uri("/imagen/paciente/" + paciente.getId())
+        // DIAGNÓSTICO: capturamos el cuerpo como texto plano en lugar de
+        // decodificarlo directamente como List<Imagen>, para poder ver en los
+        // logs de CI exactamente qué está devolviendo el servidor cuando el
+        // decode automático falla (p.ej. un mensaje de error en vez de JSON).
+        String rawBody = testClient.get().uri("/imagen/paciente/" + paciente.getId())
                 .exchange()
                 .expectStatus().isOk()
-                .expectBodyList(Imagen.class)
+                .expectBody(String.class)
                 .returnResult()
                 .getResponseBody();
 
-        assertNotNull(imagenes);
-        assertFalse(imagenes.isEmpty());
+        System.out.println("=== DEBUG GET /imagen/paciente/" + paciente.getId() + " -> raw body ===");
+        System.out.println(rawBody);
+        System.out.println("=== FIN DEBUG ===");
+
+        assertNotNull(rawBody, "El cuerpo de /imagen/paciente/" + paciente.getId() + " es null");
+
+        List<Imagen> imagenes;
+        try {
+            imagenes = objectMapper.readValue(rawBody, new TypeReference<List<Imagen>>() { });
+        } catch (Exception e) {
+            throw new RuntimeException(
+                    "No se pudo parsear como List<Imagen> la respuesta de /imagen/paciente/"
+                            + paciente.getId() + ". Cuerpo crudo devuelto por el servidor: [" + rawBody + "]", e);
+        }
+
+        assertFalse(imagenes.isEmpty(), "No se encontraron imágenes para el paciente " + paciente.getId());
         imagen = imagenes.get(0);
 
         // 5. Preparamos un objeto Informe para las pruebas
