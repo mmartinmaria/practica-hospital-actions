@@ -7,7 +7,6 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.core.io.FileSystemResource;
@@ -16,8 +15,6 @@ import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import org.springframework.web.reactive.function.BodyInserters;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.uma.example.springuma.integration.base.AbstractIntegration;
 import com.uma.example.springuma.model.Imagen;
 import com.uma.example.springuma.model.Informe;
@@ -30,7 +27,6 @@ import reactor.core.publisher.Mono;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 public class InformeControllerWebTestClientIT extends AbstractIntegration {
@@ -39,9 +35,6 @@ public class InformeControllerWebTestClientIT extends AbstractIntegration {
     private Integer port;
 
     private WebTestClient testClient;
-
-    @Autowired
-    private ObjectMapper objectMapper;
 
     private Medico medico;
     private Paciente paciente;
@@ -84,9 +77,9 @@ public class InformeControllerWebTestClientIT extends AbstractIntegration {
                 .expectStatus().isCreated();
 
         // 4. Subimos una imagen para ese paciente.
-        // El endpoint /imagen no devuelve un JSON con el objeto Imagen (devuelve
-        // texto plano), así que sólo comprobamos el status y luego recuperamos
-        // la imagen creada consultando el listado de imágenes del paciente.
+        // El endpoint POST /imagen no devuelve el objeto Imagen como JSON (devuelve
+        // texto plano), así que sólo comprobamos el status y luego recuperamos la
+        // imagen creada consultando el listado de imágenes del paciente.
         MultipartBodyBuilder builder = new MultipartBodyBuilder();
         builder.part("image", new FileSystemResource(Paths.get("src/test/resources/healthy.png").toFile()));
         builder.part("paciente", paciente);
@@ -97,33 +90,15 @@ public class InformeControllerWebTestClientIT extends AbstractIntegration {
                 .exchange()
                 .expectStatus().isOk();
 
-        // DIAGNÓSTICO: capturamos el cuerpo como texto plano en lugar de
-        // decodificarlo directamente como List<Imagen>, para poder ver en los
-        // logs de CI exactamente qué está devolviendo el servidor cuando el
-        // decode automático falla (p.ej. un mensaje de error en vez de JSON).
-        String rawBody = testClient.get().uri("/imagen/paciente/" + paciente.getId())
+        List<Imagen> imagenes = testClient.get().uri("/imagen/paciente/" + paciente.getId())
                 .exchange()
                 .expectStatus().isOk()
-                .expectBody(String.class)
+                .expectBodyList(Imagen.class)
                 .returnResult()
                 .getResponseBody();
 
-        System.out.println("=== DEBUG GET /imagen/paciente/" + paciente.getId() + " -> raw body ===");
-        System.out.println(rawBody);
-        System.out.println("=== FIN DEBUG ===");
-
-        assertNotNull(rawBody, "El cuerpo de /imagen/paciente/" + paciente.getId() + " es null");
-
-        List<Imagen> imagenes;
-        try {
-            imagenes = objectMapper.readValue(rawBody, new TypeReference<List<Imagen>>() { });
-        } catch (Exception e) {
-            throw new RuntimeException(
-                    "No se pudo parsear como List<Imagen> la respuesta de /imagen/paciente/"
-                            + paciente.getId() + ". Cuerpo crudo devuelto por el servidor: [" + rawBody + "]", e);
-        }
-
-        assertFalse(imagenes.isEmpty(), "No se encontraron imágenes para el paciente " + paciente.getId());
+        assertNotNull(imagenes);
+        assertFalse(imagenes.isEmpty());
         imagen = imagenes.get(0);
 
         // 5. Preparamos un objeto Informe para las pruebas
@@ -133,36 +108,47 @@ public class InformeControllerWebTestClientIT extends AbstractIntegration {
         informe.setImagen(imagen);
     }
 
-    @Test
-    @DisplayName("Crear un informe correctamente")
-    void crearInforme_correctamente() {
+    /**
+     * El endpoint POST /informe devuelve 201 Created pero sin el objeto Informe
+     * serializado en el cuerpo (igual que ocurre con POST /imagen), así que no
+     * podemos fiarnos de su respuesta para obtener el ID del informe creado.
+     * En su lugar, tras crearlo, lo recuperamos consultando /informe/imagen/{id}.
+     */
+    private Informe crearInformeYRecuperarlo() {
         testClient.post().uri("/informe")
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(Mono.just(informe), Informe.class)
                 .exchange()
-                .expectStatus().isCreated()
-                .expectBody()
-                .jsonPath("$.id").exists()
-                .jsonPath("$.prediccion").isEqualTo("Not cancer")
-                .jsonPath("$.contenido").isEqualTo("Paciente sana tras revisión de mamografía.");
+                .expectStatus().isCreated();
+
+        List<Informe> informes = testClient.get().uri("/informe/imagen/" + imagen.getId())
+                .exchange()
+                .expectStatus().isOk()
+                .expectBodyList(Informe.class)
+                .returnResult()
+                .getResponseBody();
+
+        assertNotNull(informes);
+        assertFalse(informes.isEmpty());
+        return informes.get(0);
+    }
+
+    @Test
+    @DisplayName("Crear un informe correctamente")
+    void crearInforme_correctamente() {
+        Informe informeCreado = crearInformeYRecuperarlo();
+
+        assertNotNull(informeCreado.getId());
+        assertEquals("Not cancer", informeCreado.getPrediccion());
+        assertEquals("Paciente sana tras revisión de mamografía.", informeCreado.getContenido());
     }
 
     @Test
     @DisplayName("Obtener un informe por su ID")
     void obtenerInformePorId() {
-        // Primero lo creamos
-        Informe informeCreado = testClient.post().uri("/informe")
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(Mono.just(informe), Informe.class)
-                .exchange()
-                .expectStatus().isCreated()
-                .expectBody(Informe.class)
-                .returnResult()
-                .getResponseBody();
+        Informe informeCreado = crearInformeYRecuperarlo();
 
-        assertNotNull(informeCreado);
-
-        // Luego lo recuperamos por su ID
+        // Lo recuperamos por su ID
         testClient.get().uri("/informe/" + informeCreado.getId())
                 .exchange()
                 .expectStatus().isOk()
@@ -197,17 +183,7 @@ public class InformeControllerWebTestClientIT extends AbstractIntegration {
     @Test
     @DisplayName("Eliminar un informe y comprobar que desaparece")
     void eliminarInforme_desaparece() {
-        // Creamos el informe
-        Informe informeCreado = testClient.post().uri("/informe")
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(Mono.just(informe), Informe.class)
-                .exchange()
-                .expectStatus().isCreated()
-                .expectBody(Informe.class)
-                .returnResult()
-                .getResponseBody();
-
-        assertNotNull(informeCreado);
+        Informe informeCreado = crearInformeYRecuperarlo();
 
         // Lo eliminamos
         testClient.delete().uri("/informe/" + informeCreado.getId())
