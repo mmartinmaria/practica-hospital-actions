@@ -32,4 +32,4 @@ jobs:
     - name: Compilar el proyecto
       run: ./mvnw compile --no-transfer-progress
     - name: Ejecucion de los tests
-      run: /mvnw verify --no-transfer-progress
+      run: ./mvnw verify --no-transfer-progress
