@@ -60,7 +60,7 @@ jobs:
       if: always()
       with:
         name: Test Results
-        report-path: '**/target/surefire-reports/TEST-*.xml,**/target/failsafe-reports/TEST-*.xml'
+        path: '**/target/surefire-reports/TEST-*.xml,**/target/failsafe-reports/TEST-*.xml'
         reporter: java-junit
         fail-on-error: false
 
