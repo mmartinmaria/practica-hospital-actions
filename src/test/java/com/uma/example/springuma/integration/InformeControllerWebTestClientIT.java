@@ -25,6 +25,7 @@ import jakarta.annotation.PostConstruct;
 import reactor.core.publisher.Mono;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -76,20 +77,30 @@ public class InformeControllerWebTestClientIT extends AbstractIntegration {
                 .exchange()
                 .expectStatus().isCreated();
 
-        // 4. Subimos una imagen para ese paciente
+        // 4. Subimos una imagen para ese paciente.
+        // El endpoint /imagen no devuelve un JSON con el objeto Imagen (devuelve
+        // texto plano), así que sólo comprobamos el status y luego recuperamos
+        // la imagen creada consultando el listado de imágenes del paciente.
         MultipartBodyBuilder builder = new MultipartBodyBuilder();
         builder.part("image", new FileSystemResource(Paths.get("src/test/resources/healthy.png").toFile()));
         builder.part("paciente", paciente);
 
-        // Capturamos la imagen creada para poder asociarla al informe
-        imagen = testClient.post().uri("/imagen")
+        testClient.post().uri("/imagen")
                 .contentType(MediaType.MULTIPART_FORM_DATA)
                 .body(BodyInserters.fromMultipartData(builder.build()))
                 .exchange()
+                .expectStatus().isOk();
+
+        List<Imagen> imagenes = testClient.get().uri("/imagen/paciente/" + paciente.getId())
+                .exchange()
                 .expectStatus().isOk()
-                .expectBody(Imagen.class)
+                .expectBodyList(Imagen.class)
                 .returnResult()
                 .getResponseBody();
+
+        assertNotNull(imagenes);
+        assertFalse(imagenes.isEmpty());
+        imagen = imagenes.get(0);
 
         // 5. Preparamos un objeto Informe para las pruebas
         informe = new Informe();
