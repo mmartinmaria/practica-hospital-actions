@@ -1,3 +1,4 @@
+[![Java CI with Maven](https://github.com/mmartinmaria/practica-hospital-actions/actions/workflows/maven.yml/badge.svg)](https://github.com/mmartinmaria/practica-hospital-actions/actions/workflows/maven.yml)
 # SpringUMA — Medical Records System
 
 > ⚠️ Replace `<YOUR_USER>` and `<YOUR_REPO>` with your actual GitHub account details.
