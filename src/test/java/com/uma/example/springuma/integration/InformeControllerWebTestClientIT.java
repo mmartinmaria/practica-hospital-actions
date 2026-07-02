@@ -27,6 +27,7 @@ import reactor.core.publisher.Mono;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 public class InformeControllerWebTestClientIT extends AbstractIntegration {
@@ -138,8 +139,14 @@ public class InformeControllerWebTestClientIT extends AbstractIntegration {
     void crearInforme_correctamente() {
         Informe informeCreado = crearInformeYRecuperarlo();
 
+        // La predicción no es el valor que enviamos: el controlador la genera
+        // internamente llamando al servicio de IA, devolviendo un resultado
+        // con forma {"status": ..., "score": ...}. Sólo comprobamos su forma,
+        // igual que hace ImagenControllerWebTestClientIT con /imagen/predict.
         assertNotNull(informeCreado.getId());
-        assertEquals("Not cancer", informeCreado.getPrediccion());
+        assertTrue(informeCreado.getPrediccion().contains("status"));
+        assertTrue(informeCreado.getPrediccion().toLowerCase().contains("cancer"));
+        assertTrue(informeCreado.getPrediccion().contains("score"));
         assertEquals("Paciente sana tras revisión de mamografía.", informeCreado.getContenido());
     }
 
@@ -190,9 +197,17 @@ public class InformeControllerWebTestClientIT extends AbstractIntegration {
                 .exchange()
                 .expectStatus().isNoContent(); // O isOk() dependiendo de tu controlador
 
-        // Intentamos buscarlo y esperamos un error 404 (Not Found)
-        testClient.get().uri("/informe/" + informeCreado.getId())
+        // Comprobamos que ya no aparece en el listado de informes de la imagen
+        // (igual que se hace en el resto del proyecto para verificar borrados,
+        // en vez de volver a pedir la entidad individual por su ID)
+        List<Informe> informes = testClient.get().uri("/informe/imagen/" + imagen.getId())
                 .exchange()
-                .expectStatus().isNotFound();
+                .expectStatus().isOk()
+                .expectBodyList(Informe.class)
+                .returnResult()
+                .getResponseBody();
+
+        assertNotNull(informes);
+        assertTrue(informes.isEmpty());
     }
 }
