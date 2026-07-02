@@ -102,6 +102,7 @@ public class InformeControllerWebTestClientIT extends AbstractIntegration {
     @DisplayName("Crear un informe correctamente")
     void crearInforme_correctamente() {
         testClient.post().uri("/informe")
+                .contentType(MediaType.APPLICATION_JSON)
                 .body(Mono.just(informe), Informe.class)
                 .exchange()
                 .expectStatus().isCreated()
@@ -116,6 +117,7 @@ public class InformeControllerWebTestClientIT extends AbstractIntegration {
     void obtenerInformePorId() {
         // Primero lo creamos
         Informe informeCreado = testClient.post().uri("/informe")
+                .contentType(MediaType.APPLICATION_JSON)
                 .body(Mono.just(informe), Informe.class)
                 .exchange()
                 .expectStatus().isCreated()
@@ -139,6 +141,7 @@ public class InformeControllerWebTestClientIT extends AbstractIntegration {
     void obtenerInformesPorImagen() {
         // Creamos el informe
         testClient.post().uri("/informe")
+                .contentType(MediaType.APPLICATION_JSON)
                 .body(Mono.just(informe), Informe.class)
                 .exchange()
                 .expectStatus().isCreated();
@@ -161,6 +164,7 @@ public class InformeControllerWebTestClientIT extends AbstractIntegration {
     void eliminarInforme_desaparece() {
         // Creamos el informe
         Informe informeCreado = testClient.post().uri("/informe")
+                .contentType(MediaType.APPLICATION_JSON)
                 .body(Mono.just(informe), Informe.class)
                 .exchange()
                 .expectStatus().isCreated()
