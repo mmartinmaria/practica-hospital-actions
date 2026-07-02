@@ -33,3 +33,12 @@ jobs:
       run: ./mvnw compile --no-transfer-progress
     - name: Ejecucion de los tests
       run: ./mvnw verify --no-transfer-progress
+    - name: Imprimir mensaje de fallo  
+      if: failure()
+      run: echo "Ha fallado los tests" 
+    - name: Publish Test Report
+      uses: ctrf-io/github-test-reporter@v1
+      with:
+        report-path: 'target/failsafe-reports/*.xml'
+        github-report: true
+      if: always()
